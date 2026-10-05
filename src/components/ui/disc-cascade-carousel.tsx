@@ -237,16 +237,16 @@ const CSS =
   "rgba(150,215,255,.32) 168deg,rgba(255,170,225,.32) 186deg,rgba(255,236,170,.26) 200deg,transparent 224deg,transparent 360deg)," +
   "radial-gradient(circle at 32% 24%,rgba(255,255,255,.3),transparent 46%)}" +
   ".dcc-slide:focus-visible .dcc-disc{box-shadow:inset 0 0 0 3px var(--color-background,#fff),inset 0 0 0 6px var(--color-primary,#171717)}" +
-  ".dcc-nav{position:absolute;top:calc(var(--dcc-pad) * .9);left:50%;transform:translateX(-50%);z-index:5;" +
-  "display:flex;align-items:center;gap:clamp(12px,1.8cqw,22px);font-size:12px;white-space:nowrap}" +
+  ".dcc-nav{position:absolute;top:calc(var(--dcc-pad) * .9 + 72px);left:50%;transform:translateX(-50%);z-index:5;" +
+  "display:flex;align-items:center;gap:clamp(12px,1.8cqw,22px);font-size:12px;white-space:nowrap;font-family:'Outfit',sans-serif;letter-spacing:.05em}" +
   ".dcc-brand{font-weight:800;font-size:15px;letter-spacing:-.04em;margin-right:clamp(6px,1.4cqw,18px)}" +
   ".dcc-link{position:relative;color:inherit;text-decoration:none;opacity:.6;transition:opacity .2s;padding:4px 0}" +
   ".dcc-link:hover,.dcc-link[aria-current]{opacity:1}" +
   ".dcc-link[aria-current]::after{content:\"\";position:absolute;left:50%;bottom:-5px;width:3px;height:3px;margin-left:-1.5px;" +
   "border-radius:50%;background:currentColor}" +
   ".dcc-menu{position:relative}" +
-  ".dcc-menubtn{display:inline-flex;align-items:center;gap:4px;margin:0;padding:4px 0;border:0;background:none;" +
-  "color:inherit;font:inherit;cursor:pointer;opacity:.6;transition:opacity .2s}" +
+  ".dcc-menubtn{display:inline-flex;align-items:center;gap:6px;margin:0;padding:4px 2px;border:0;background:none;" +
+  "color:inherit;font:inherit;cursor:pointer;opacity:.8;transition:opacity .2s;font-size:15px;font-weight:600;letter-spacing:.06em}" +
   ".dcc-menubtn:hover,.dcc-menubtn[aria-expanded=true]{opacity:1}" +
   ".dcc-menubtn svg{transition:transform .25s}.dcc-menubtn[aria-expanded=true] svg{transform:rotate(180deg)}" +
   ".dcc-list{position:absolute;top:calc(100% + 10px);left:50%;transform:translateX(-50%);min-width:240px;margin:0;" +
@@ -262,7 +262,7 @@ const CSS =
   ".dcc-opt[aria-current] .dcc-optt{font-weight:600}" +
   ".dcc-optn{font-size:10px;opacity:.45;font-variant-numeric:tabular-nums}" +
   ".dcc-opty{margin-left:auto;font-size:10px;opacity:.45}" +
-  ".dcc-head{position:absolute;top:var(--dcc-pad);left:var(--dcc-pad);z-index:4;width:clamp(170px,21cqw,290px);pointer-events:none}" +
+  ".dcc-head{position:absolute;top:calc(var(--dcc-pad) + 85px);left:var(--dcc-pad);z-index:4;width:clamp(170px,21cqw,290px);pointer-events:none}" +
   ".dcc-title{margin:0 0 10px;font-weight:400;font-size:clamp(20px,2.5cqw,34px);line-height:.98;" +
   "letter-spacing:-.01em;text-transform:uppercase;text-wrap:balance}" +
   ".dcc-dl{margin:0}" +
@@ -293,7 +293,7 @@ const CSS =
   "text-transform:uppercase;opacity:.45;pointer-events:none;line-height:34px}" +
   ".dcc-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}" +
   "@container (max-width:720px){.dcc-link{display:none}.dcc-rev+.dcc-rev{display:none}.dcc-hint{display:none}" +
-  ".dcc-head{width:clamp(150px,44cqw,230px);top:calc(var(--dcc-pad) * 3.2)}.dcc-row:nth-child(n+3){display:none}}" +
+  ".dcc-head{width:clamp(150px,44cqw,230px);top:calc(var(--dcc-pad) * 3.2 + 70px)}.dcc-row:nth-child(n+3){display:none}}" +
   "@container (max-width:420px){.dcc-revs{bottom:calc(var(--dcc-pad) * 4.4)}}" +
   "@media (prefers-reduced-motion:reduce){.dcc-root .dcc-idle{animation:none}.dcc-in,.dcc-list{animation:none}" +
   ".dcc-tilt,.dcc-btn,.dcc-link,.dcc-menubtn svg{transition:none}}"
