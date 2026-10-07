@@ -1,9 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import DiscCascadeCarousel, { type DiscCascadeItem } from "./components/ui/disc-cascade-carousel";
 import AdminPanel from "./components/ui/admin-panel";
 import Navbar from "./components/ui/Navbar";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Loader2, AlertCircle } from "lucide-react";
+import { supabase } from "./lib/supabase";
 
 export type EventPhoto = {
   id: string;
@@ -27,7 +28,26 @@ export type EventCategory = {
   photos: EventPhoto[];
 };
 
-// Event Categories Default Data
+export type Gallery2Row = {
+  id: string;
+  event_id: string;
+  event_title: string;
+  event_subtitle: string | null;
+  event_year: string | null;
+  event_pattern: string | null;
+  event_palette: [string, string, string] | null;
+  event_cover_image: string | null;
+  photo_title: string;
+  photo_url: string;
+  storage_path: string | null;
+  photo_date: string | null;
+  photo_location: string | null;
+  frame_style: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+// Event Categories Default Data (Fallback when Supabase is unpopulated or offline)
 const DEFAULT_EVENTS_DATA: EventCategory[] = [
   {
     id: "freshers",
@@ -91,15 +111,45 @@ const DEFAULT_EVENTS_DATA: EventCategory[] = [
   }
 ];
 
-// Persistence helpers
-const EVENTS_STORAGE_KEY = "gallery_trinity_events";
-function loadStoredEvents(): EventCategory[] {
-  try {
-    const stored = localStorage.getItem(EVENTS_STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
-  } catch { /* ignore */ }
-  return DEFAULT_EVENTS_DATA;
+// Helper to transform gallery2 database rows into structured EventCategory models
+function transformGallery2Rows(rows: Gallery2Row[]): EventCategory[] {
+  const eventsMap = new Map<string, EventCategory>();
+
+  rows.forEach((row) => {
+    const eventId = row.event_id || "general";
+    if (!eventsMap.has(eventId)) {
+      eventsMap.set(eventId, {
+        id: eventId,
+        title: row.event_title || "Gallery Event",
+        subtitle: row.event_subtitle || "Event Gallery Collection",
+        year: row.event_year || new Date().getFullYear().toString(),
+        pattern: (row.event_pattern as EventCategory["pattern"]) || "sunburst",
+        palette: (Array.isArray(row.event_palette) && row.event_palette.length === 3
+          ? row.event_palette
+          : ["#1b1d1f", "#e8572b", "#f0c94c"]) as [string, string, string],
+        coverImage: row.event_cover_image || row.photo_url,
+        photos: [],
+      });
+    }
+
+    const event = eventsMap.get(eventId)!;
+    if (row.photo_url) {
+      event.photos.push({
+        id: row.id,
+        src: row.photo_url,
+        title: row.photo_title || "Untitled Photo",
+        date: row.photo_date || new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }),
+        location: row.photo_location || "Gallery Trinity",
+        eventId: event.id,
+        eventName: event.title,
+        frameStyle: (row.frame_style as EventPhoto["frameStyle"]) || "baroque-gold",
+      });
+    }
+  });
+
+  return Array.from(eventsMap.values());
 }
+
 
 // ── Photo Gallery Modal ──────────────────────────────────────────────────────
 function PhotoGalleryModal({
@@ -210,7 +260,7 @@ function PhotoGalleryModal({
                 <div className="relative w-full bg-black flex items-center justify-center" style={{ maxHeight: "75vh" }}>
                   <img src={currentPhoto.src} alt={currentPhoto.title} className="w-auto h-auto max-w-full max-h-[75vh] object-contain" />
                 </div>
-                
+
                 {/* Info Bar */}
                 <div className="w-full px-6 py-4 bg-[#0a0f1c] flex items-center justify-between gap-4 border-t border-slate-800/80">
                   <div className="flex-1 min-w-0">
@@ -254,14 +304,55 @@ function PhotoGalleryModal({
 
 // ── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [eventsData, setEventsData] = useState<EventCategory[]>(loadStoredEvents);
+  const [eventsData, setEventsData] = useState<EventCategory[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [openEventId, setOpenEventId] = useState<string | null>(null);
 
-  // Persist events on change
+  // Fetch gallery2 data from Supabase
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchGalleryData() {
+      try {
+        setLoading(true);
+        setError(null);
+        const { data, error: supabaseError } = await supabase
+          .from("gallery2")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (supabaseError) {
+          throw supabaseError;
+        }
+
+        if (isMounted) {
+          if (data && data.length > 0) {
+            const transformed = transformGallery2Rows(data as Gallery2Row[]);
+            setEventsData(transformed);
+          } else {
+            // If gallery2 table is currently empty, fallback to default UI events
+            setEventsData(DEFAULT_EVENTS_DATA);
+          }
+        }
+      } catch (err: unknown) {
+        console.error("Error fetching from Supabase gallery2:", err);
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : "Failed to load gallery items.");
+          // Fallback gracefully to default events on error so UI never breaks
+          setEventsData(DEFAULT_EVENTS_DATA);
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    fetchGalleryData();
+    return () => { isMounted = false; };
+  }, []);
+
   const handleUpdateEvents = useCallback((updated: EventCategory[]) => {
     setEventsData(updated);
-    localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(updated));
   }, []);
 
   // Map eventsData to DiscCascadeItem format
@@ -296,39 +387,57 @@ export default function App() {
       </div>
 
       <div className="relative z-10 flex-1 flex flex-col w-full h-full overflow-hidden">
-        {/* DISCS CAROUSEL VIEW */}
+        {/* DISCS CAROUSEL VIEW / LOADING / ERROR / EMPTY STATES */}
         <div className="flex-1 w-full relative overflow-hidden flex flex-col justify-center">
-          <DiscCascadeCarousel
-            items={discCascadeItems}
-            height="100vh"
-            discSize="clamp(190px, min(48vmin, 36vw), 380px)"
-            spacing={1.05}
-            rise={0.22}
-            depth={0.45}
-            yaw={24}
-            fan={-12}
-            tilt={-5}
-            roll={110}
-            spin={18}
-            sheen={0.65}
-            bounce={0.25}
-            duration={0.85}
-            loop={true}
-            autoplay={4500}
-            brand=""
-            hint="DRAG OR SWIPE · CLICK ACTIVE DISC TO VIEW PHOTOS"
-            background="transparent"
-            color="#f59e0b"
-            serif='"Cinzel", "Palatino Linotype", serif'
-            sans='"Outfit", sans-serif'
-            display='"Cinzel Decorative", "Palatino Linotype", serif'
-            onSelect={(item) => {
-              const eventId = (item as DiscCascadeItem & { eventId?: string }).eventId;
-              if (eventId) setOpenEventId(eventId);
-            }}
-          />
+          {loading ? (
+            <div className="flex flex-col items-center justify-center h-full gap-4 text-amber-400">
+              <Loader2 className="w-10 h-10 animate-spin" />
+              <p className="font-mono text-sm tracking-widest uppercase text-amber-200/80">Loading Gallery Trinity...</p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
+              <AlertCircle className="w-10 h-10 text-amber-500" />
+              <p className="font-mono text-sm text-amber-200">{error}</p>
+              <p className="text-xs text-slate-400 font-mono">Displaying local default gallery collection.</p>
+            </div>
+          ) : eventsData.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
+              <p className="font-mono text-sm text-slate-400 uppercase tracking-widest">No Gallery Events Available</p>
+            </div>
+          ) : (
+            <DiscCascadeCarousel
+              items={discCascadeItems}
+              height="100vh"
+              discSize="clamp(190px, min(48vmin, 36vw), 380px)"
+              spacing={1.05}
+              rise={0.22}
+              depth={0.45}
+              yaw={24}
+              fan={-12}
+              tilt={-5}
+              roll={110}
+              spin={18}
+              sheen={0.65}
+              bounce={0.25}
+              duration={0.85}
+              loop={true}
+              autoplay={4500}
+              brand=""
+              hint="DRAG OR SWIPE · CLICK ACTIVE DISC TO VIEW PHOTOS"
+              background="transparent"
+              color="#f59e0b"
+              serif='"Cinzel", "Palatino Linotype", serif'
+              sans='"Outfit", sans-serif'
+              display='"Cinzel Decorative", "Palatino Linotype", serif'
+              onSelect={(item) => {
+                const eventId = (item as DiscCascadeItem & { eventId?: string }).eventId;
+                if (eventId) setOpenEventId(eventId);
+              }}
+            />
+          )}
         </div>
       </div>
+
 
       {/* ── PHOTO GALLERY MODAL ───────────────────────────────────────────── */}
       <AnimatePresence>
