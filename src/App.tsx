@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import DiscCascadeCarousel, { type DiscCascadeItem } from "./components/ui/disc-cascade-carousel";
 import AdminPanel from "./components/ui/admin-panel";
 import Navbar from "./components/ui/Navbar";
-import { ChevronLeft, ChevronRight, X, Loader2, AlertCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Loader2 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 
 export type EventPhoto = {
@@ -111,44 +111,53 @@ const DEFAULT_EVENTS_DATA: EventCategory[] = [
   }
 ];
 
-// Helper to transform gallery2 database rows into structured EventCategory models
+// Helper to transform gallery2 database rows into structured EventCategory models (1 row = 1 carousel item)
 function transformGallery2Rows(rows: Gallery2Row[]): EventCategory[] {
-  const eventsMap = new Map<string, EventCategory>();
+  return rows.map((row, index) => {
+    // Unique identity per row using row.id or index fallback
+    const uniqueId = row.id || `gallery-item-${index}`;
 
-  rows.forEach((row) => {
-    const eventId = row.event_id || "general";
-    if (!eventsMap.has(eventId)) {
-      eventsMap.set(eventId, {
-        id: eventId,
-        title: row.event_title || "Gallery Event",
-        subtitle: row.event_subtitle || "Event Gallery Collection",
-        year: row.event_year || new Date().getFullYear().toString(),
-        pattern: (row.event_pattern as EventCategory["pattern"]) || "sunburst",
-        palette: (Array.isArray(row.event_palette) && row.event_palette.length === 3
-          ? row.event_palette
-          : ["#1b1d1f", "#e8572b", "#f0c94c"]) as [string, string, string],
-        coverImage: row.event_cover_image || row.photo_url,
-        photos: [],
-      });
+    // Parse palette if it arrives as a JSON string from Postgres
+    let parsedPalette: [string, string, string] = ["#1b1d1f", "#e8572b", "#f0c94c"];
+    if (Array.isArray(row.event_palette) && row.event_palette.length === 3) {
+      parsedPalette = row.event_palette as [string, string, string];
+    } else if (typeof row.event_palette === "string") {
+      try {
+        const parsed = JSON.parse(row.event_palette);
+        if (Array.isArray(parsed) && parsed.length === 3) {
+          parsedPalette = parsed as [string, string, string];
+        }
+      } catch { /* ignore fallback */ }
     }
 
-    const event = eventsMap.get(eventId)!;
-    if (row.photo_url) {
-      event.photos.push({
-        id: row.id,
-        src: row.photo_url,
-        title: row.photo_title || "Untitled Photo",
-        date: row.photo_date || new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }),
-        location: row.photo_location || "Gallery Trinity",
-        eventId: event.id,
-        eventName: event.title,
-        frameStyle: (row.frame_style as EventPhoto["frameStyle"]) || "baroque-gold",
-      });
-    }
+    const itemTitle = row.photo_title || row.event_title || "Gallery Item";
+    const itemSrc = row.photo_url || row.event_cover_image || "";
+
+    const singlePhoto: EventPhoto = {
+      id: uniqueId,
+      src: itemSrc,
+      title: itemTitle,
+      date: row.photo_date || (row.created_at ? new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }) : ""),
+      location: row.photo_location || "Gallery Trinity",
+      eventId: row.event_id || "trinity-2026",
+      eventName: row.event_title || "Trinity Fest",
+      frameStyle: (row.frame_style as EventPhoto["frameStyle"]) || "baroque-gold",
+    };
+
+    return {
+      id: uniqueId,
+      title: itemTitle,
+      subtitle: row.event_subtitle || "Trinity Gallery Collection",
+      year: row.event_year || new Date().getFullYear().toString(),
+      pattern: (row.event_pattern as EventCategory["pattern"]) || "sunburst",
+      palette: parsedPalette,
+      coverImage: itemSrc,
+      photos: [singlePhoto],
+    };
   });
-
-  return Array.from(eventsMap.values());
 }
+
+
 
 
 // ── Photo Gallery Modal ──────────────────────────────────────────────────────
@@ -304,9 +313,8 @@ function PhotoGalleryModal({
 
 // ── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [eventsData, setEventsData] = useState<EventCategory[]>([]);
+  const [eventsData, setEventsData] = useState<EventCategory[]>(DEFAULT_EVENTS_DATA);
   const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [openEventId, setOpenEventId] = useState<string | null>(null);
 
@@ -316,7 +324,6 @@ export default function App() {
     async function fetchGalleryData() {
       try {
         setLoading(true);
-        setError(null);
         const { data, error: supabaseError } = await supabase
           .from("gallery2")
           .select("*")
@@ -330,26 +337,22 @@ export default function App() {
           if (data && data.length > 0) {
             const transformed = transformGallery2Rows(data as Gallery2Row[]);
             setEventsData(transformed);
-          } else {
-            // If gallery2 table is currently empty, fallback to default UI events
-            setEventsData(DEFAULT_EVENTS_DATA);
           }
         }
+
+
       } catch (err: unknown) {
         console.error("Error fetching from Supabase gallery2:", err);
-        if (isMounted) {
-          setError(err instanceof Error ? err.message : "Failed to load gallery items.");
-          // Fallback gracefully to default events on error so UI never breaks
-          setEventsData(DEFAULT_EVENTS_DATA);
-        }
       } finally {
         if (isMounted) setLoading(false);
       }
     }
 
+
     fetchGalleryData();
     return () => { isMounted = false; };
   }, []);
+
 
   const handleUpdateEvents = useCallback((updated: EventCategory[]) => {
     setEventsData(updated);
@@ -387,24 +390,9 @@ export default function App() {
       </div>
 
       <div className="relative z-10 flex-1 flex flex-col w-full h-full overflow-hidden">
-        {/* DISCS CAROUSEL VIEW / LOADING / ERROR / EMPTY STATES */}
+        {/* DISCS CAROUSEL VIEW */}
         <div className="flex-1 w-full relative overflow-hidden flex flex-col justify-center">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center h-full gap-4 text-amber-400">
-              <Loader2 className="w-10 h-10 animate-spin" />
-              <p className="font-mono text-sm tracking-widest uppercase text-amber-200/80">Loading Gallery Trinity...</p>
-            </div>
-          ) : error ? (
-            <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
-              <AlertCircle className="w-10 h-10 text-amber-500" />
-              <p className="font-mono text-sm text-amber-200">{error}</p>
-              <p className="text-xs text-slate-400 font-mono">Displaying local default gallery collection.</p>
-            </div>
-          ) : eventsData.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
-              <p className="font-mono text-sm text-slate-400 uppercase tracking-widest">No Gallery Events Available</p>
-            </div>
-          ) : (
+          {discCascadeItems.length > 0 && (
             <DiscCascadeCarousel
               items={discCascadeItems}
               height="100vh"
@@ -435,7 +423,16 @@ export default function App() {
               }}
             />
           )}
+
+          {/* Non-intrusive loading badge */}
+          {loading && (
+            <div className="absolute top-4 right-4 z-50 px-3 py-1.5 rounded-full bg-slate-900/80 border border-amber-500/30 text-amber-400 flex items-center gap-2 text-xs font-mono backdrop-blur-md">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Updating from Supabase...
+            </div>
+          )}
         </div>
+
       </div>
 
 
